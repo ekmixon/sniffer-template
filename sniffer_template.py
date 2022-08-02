@@ -48,7 +48,11 @@ def open_bzip2_file_to_tmp_file(bzip2_filename):
 				tmp_h.write(data)
 		return tmp_path
 	except:
-		sys.stderr.write("While expanding bzip2 file, unable to write to " + str(tmp_path) + ', exiting.\n')
+		sys.stderr.write(
+			f"While expanding bzip2 file, unable to write to {str(tmp_path)}"
+			+ ', exiting.\n'
+		)
+
 		raise
 
 
@@ -62,7 +66,11 @@ def open_gzip_file_to_tmp_file(gzip_filename):
 				tmp_h.write(data)
 		return tmp_path
 	except:
-		sys.stderr.write("While expanding gzip file, unable to write to " + str(tmp_path) + ', exiting.\n')
+		sys.stderr.write(
+			f"While expanding gzip file, unable to write to {str(tmp_path)}"
+			+ ', exiting.\n'
+		)
+
 		raise
 
 
@@ -86,7 +94,7 @@ def save_packet(raw_packet, destination):
 			try:
 				save_packet.save_handles[destination] = PcapWriter(filename=destination, append=True)
 			except:
-				debug_out("Unable to open " + destination + ", no packets will be saved.")
+				debug_out(f"Unable to open {destination}, no packets will be saved.")
 
 		if save_packet.save_handles[destination] is not None:
 			save_packet.save_handles[destination].write(raw_packet)
@@ -121,16 +129,19 @@ def process_packet_source(if_name, pcap_source, user_args):
 
 	#We have an interface to sniff on
 	if if_name:
-		debug_out('Reading packets from interface ' + if_name)
+		debug_out(f'Reading packets from interface {if_name}')
 		try:
 			if user_args['count']:
 				sniff(store=0, iface=if_name, filter=user_args['bpf'], count=user_args['count'], prn=lambda x: processpacket(x))	# pylint: disable=unnecessary-lambda
 			else:
 				sniff(store=0, iface=if_name, filter=user_args['bpf'], prn=lambda x: processpacket(x))					# pylint: disable=unnecessary-lambda
-		except ((Scapy_Exception, PermissionError)):
-			sys.stderr.write("Unable to open interface " + str(pcap_source) + ' .  Permission error?  Perhaps runs as root or under sudo?  Exiting.\n')
+		except (Scapy_Exception, PermissionError):
+			sys.stderr.write(
+				f"Unable to open interface {str(pcap_source)}"
+				+ ' .  Permission error?  Perhaps runs as root or under sudo?  Exiting.\n'
+			)
+
 			raise
-	#Read from stdin
 	elif pcap_source in ('-', None):
 		debug_out('Reading packets from stdin.')
 		tmp_packets = tempfile.NamedTemporaryFile(delete=True)											# pylint: disable=consider-using-with
@@ -138,17 +149,16 @@ def process_packet_source(if_name, pcap_source, user_args):
 		tmp_packets.flush()
 		source_file = tmp_packets.name
 		close_temp = True
-	#Set up source packet file; next 2 sections check for and handle compressed file extensions first, then final "else" treats the source as a pcap file
 	elif pcap_source.endswith('.bz2'):
-		debug_out('Reading bzip2 compressed packets from file ' + pcap_source)
+		debug_out(f'Reading bzip2 compressed packets from file {pcap_source}')
 		source_file = open_bzip2_file_to_tmp_file(pcap_source)
 		delete_temp = True
 	elif pcap_source.endswith('.gz'):
-		debug_out('Reading gzip compressed packets from file ' + pcap_source)
+		debug_out(f'Reading gzip compressed packets from file {pcap_source}')
 		source_file = open_gzip_file_to_tmp_file(pcap_source)
 		delete_temp = True
 	else:
-		debug_out('Reading packets from file ' + pcap_source)
+		debug_out(f'Reading packets from file {pcap_source}')
 		source_file = pcap_source
 
 	#Try to process file first
@@ -160,10 +170,10 @@ def process_packet_source(if_name, pcap_source, user_args):
 				else:
 					sniff(store=0, offline=source_file, filter=user_args['bpf'], prn=lambda x: processpacket(x))				# pylint: disable=unnecessary-lambda
 			except (FileNotFoundError, IOError):
-				sys.stderr.write("Unable to open file " + str(pcap_source) + ', exiting.\n')
+				sys.stderr.write(f"Unable to open file {str(pcap_source)}" + ', exiting.\n')
 				raise
 		else:
-			sys.stderr.write("Unable to open file " + str(source_file) + ', skipping.\n')
+			sys.stderr.write(f"Unable to open file {str(source_file)}" + ', skipping.\n')
 
 	if close_temp:
 		tmp_packets.close()
@@ -220,7 +230,6 @@ def processpacket(p):
 		#p[ICMP].show()
 		source_port = str(p[ICMP].type)
 		dest_port = str(p[ICMP].code)
-	#IPv6 doesn't have a dedicated ICMPv6 layer, so we need to key off the IPv6 next_header value of 58 for ICMPv6
 	elif p.haslayer(IPv6) and p.getlayer(IPv6).nh == 0:	#0: Hop-by-hop options header
 		hbh_layer = p.getlayer('IPv6').payload
 		if hbh_layer.nh == 58:
@@ -250,9 +259,9 @@ def processpacket(p):
 			p_proto = 'ARP_r'
 		#p[ARP].show()
 		#sys.exit(2)
-		source_ip = str(p[ARP].psrc) + "/" + str(p[ARP].hwsrc)
+		source_ip = f"{str(p[ARP].psrc)}/{str(p[ARP].hwsrc)}"
 		source_port = ''
-		dest_ip = str(p[ARP].pdst) + '/' + str(p[ARP].hwdst)
+		dest_ip = f'{str(p[ARP].pdst)}/{str(p[ARP].hwdst)}'
 		dest_port = ''
 	elif p.haslayer(IP) and p[IP].proto == 2:		#IGMP
 		p_proto = 'IGMP'
@@ -274,12 +283,9 @@ def processpacket(p):
 	print("{0:5s} {1:>38s}/{2:6s} -> {3:>38s}/{4:6s} {5:40s}".format(p_proto, source_ip, source_port, dest_ip, dest_port, all_layers_out))
 
 
-	#==== Look for interesting/malicious characteristics so we can save these to disk
-	is_interesting = False
-
-	#Note that many of these need the above block of code to set IP addresses and ports
-	if (source_port == 7 and dest_port == 19) or (source_port == 19 and dest_port == 7):			#echo-chargen
-		is_interesting = True
+	is_interesting = (source_port == 7 and dest_port == 19) or (
+		source_port == 19 and dest_port == 7
+	)
 
 	#Other interesting things to check:
 	#Is IPv4 and has IP options (IHL field > 5)
@@ -332,7 +338,10 @@ if __name__ == '__main__':
 	import argparse
 
 	#REPLACEME
-	parser = argparse.ArgumentParser(description='__sniffer_tmplate version ' + str(__version__))
+	parser = argparse.ArgumentParser(
+		description=f'__sniffer_tmplate version {str(__version__)}'
+	)
+
 	parser.add_argument('-i', '--interface', help='Interface from which to read packets', required=False, default=None)
 	parser.add_argument('-r', '--read', help='Pcap file(s) from which to read packets', required=False, default=[], nargs='*')
 	parser.add_argument('-w', '--write', help='Pcap file to which to save packets', required=False, default=None)
